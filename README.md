@@ -27,6 +27,7 @@ Robotics Arm\
   arduino\ArmHome\ArmHome.ino       firmware: home, smooth moves, EEPROM state, serial commands
   arduino\ArmHome\kinematics.h      FK / IK in C++ (not called by the sketch yet)
   sim\arm_control.py                PC controller: angles or xyz in, drives the real arm over serial (hardware only)
+  sim\arm_ui.py, sim\ui\index.html  teaching UI in the browser: sliders, FK drawing, IK form, code box
   sim\kinematics.py                 FK / IK + calibration constants + 20,000-pose self-test
   sim\_test_link.py                 tests the serial protocol against a fake board
   sim\_views.py, sim\_ortho.py      CAD inspection helpers (STL renders), not used by arm_control.py
@@ -116,6 +117,24 @@ If `python` is not on your PATH, call the interpreter by its full path (or use `
 - Each move is one line, `m a0 a1 a2 a3 a4 a5`. The firmware runs the synchronised smooth motion and answers `lastSent:` when finished; that reply is the new pose.
 - If the Arduino does not answer, the pose is not updated; once the arm is idle type `sync`.
 - Joint-limit violations, unreachable targets and failed IK are caught on the PC, so nothing is sent for them.
+
+### Teaching UI (browser)
+
+```powershell
+python sim\arm_ui.py                  # opens http://127.0.0.1:8000, connect to the board inside the page
+python sim\arm_ui.py --port COM8      # connect first
+```
+
+- **Sliders** for the six joints, with the forward-kinematics numbers (tip position, tool pitch, waist angle, link angles) updating as you drag. Move arm sends the pose; "move the arm when I let go of a slider" does it automatically.
+- **Inverse kinematics** tab: type x, y, z and tool pitch. Solve (just shows the angles, the sliders jump to them) or Solve and move arm.
+- **Write code** tab: short Python (10 to 20 lines) with the FK and IK equations written out and the numbers to edit at the top (link lengths, servo angles, target x, y, z, pitch). Run with the button or Ctrl+Enter. Examples: *Forward kinematics (equations)*, *Inverse kinematics (equations)*, *FK then IK (round trip)*, *Move once*, *Sweep the waist*, *Square in the air (IK)*.
+  - Maths: `sin cos atan2 acos sqrt radians degrees pi`, plus `for`, `if`, `range`, `round`, `print`. No `import`, no file access.
+  - Helpers: `to_link_angles(s0, s1, s2, s3)` (servo degrees to link angles), `to_servo(yaw, a1, bend2, bend3)` (link angles back to servo degrees).
+  - Arm: `move(a0, a1, a2, a3)`, `move_xyz(x, y, z, pitch)`, `home()`, `pose()`, `wait(s)`.
+  - Built-in answers to compare with: `fk(a0, a1, a2, a3)` returns `(x, y, z, pitch)`; `ik(x, y, z, pitch)` returns the angles or `None`.
+  - Stop ends a running script. It is a guard against accidents, not a security sandbox, so use it on a trusted machine.
+- Without a board, FK and IK still work; moves answer "not connected".
+- The page is served to this computer only.
 
 ---
 

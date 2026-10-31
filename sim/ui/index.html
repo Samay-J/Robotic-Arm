@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robotics Arm Lab</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --ink: #1c2330; --muted: #5f6b7c; --line: #dde1e8;
+    --accent: #1f6feb; --accent-ink: #ffffff; --ok: #1a7f4b; --bad: #c0392b;
+    --l1: #1f6feb; --l2: #e08a00; --l3: #1a7f4b; --code-bg: #0f1623; --code-ink: #e6edf7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11151c; --card: #1a202b; --ink: #e8edf5; --muted: #98a4b6; --line: #2c3544;
+            --accent: #4c8dff; --ok: #3fb97a; --bad: #ff7a6b; --l1: #4c8dff; --l2: #f0a63a; --l3: #3fb97a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 20px; margin: 0 12px 0 0; }
+  .status { padding: 3px 10px; border-radius: 999px; font-size: 14px; background: var(--line); color: var(--muted); }
+  .status.on { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  main { display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 16px; padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h2 { font-size: 16px; margin: 0 0 10px; }
+  button, select, input[type=number], input[type=text] { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.danger { color: var(--bad); border-color: var(--bad); }
+  button:disabled { opacity: .5; cursor: default; }
+  .joint { margin-bottom: 10px; }
+  .joint .row { display: flex; align-items: baseline; gap: 8px; }
+  .joint .name { flex: 1; font-weight: 600; }
+  .joint .ch { color: var(--muted); font-size: 13px; }
+  .joint input[type=number] { width: 78px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  label.chk { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
+  .cap { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  table.t { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  table.t th, table.t td { text-align: left; padding: 3px 10px 3px 0; font-weight: normal; }
+  table.t th { color: var(--muted); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 14px; font-weight: 600; color: var(--muted); }
+  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .grid4 label { display: flex; flex-direction: column; font-size: 14px; color: var(--muted); }
+  .grid4 input { width: 100%; }
+  textarea { width: 100%; min-height: 340px; font: 15px/1.5 ui-monospace, Consolas, monospace; background: var(--code-bg); color: var(--code-ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; resize: vertical; tab-size: 4; white-space: pre; overflow: auto; }
+  pre.out { margin: 8px 0 0; min-height: 80px; max-height: 260px; overflow: auto; background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 10px 12px; font: 14px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+  .msg { margin-top: 8px; font-size: 14px; min-height: 20px; }
+  .msg.err { color: var(--bad); } .msg.ok { color: var(--ok); }
+  .ref { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+  .ref code { color: var(--ink); background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Robotics Arm Lab</h1>
+  <select id="port" style="min-width:220px"></select>
+  <button id="btnRefresh" title="Look for serial ports again">Refresh</button>
+  <button id="btnConnect" class="primary">Connect</button>
+  <button id="btnDisconnect" class="hide">Disconnect</button>
+  <span id="status" class="status">not connected (preview only)</span>
+  <span id="topmsg" class="msg" style="margin:0"></span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Joint angles (servo degrees)</h2>
+    <div id="joints"></div>
+    <div class="actions">
+      <button id="btnSend" class="primary">Move arm</button>
+      <button id="btnHome">Home</button>
+      <button id="btnRead" title="Ask the Arduino what pose it believes">Read pose</button>
+      <button id="btnStop" class="danger">Stop</button>
+    </div>
+    <div class="actions"><label class="chk"><input type="checkbox" id="onRelease"> move the arm when I let go of a slider</label></div>
+    <div id="moveMsg" class="msg"></div>
+  </section>
+
+  <section style="display:grid; gap:16px; align-content:start">
+    <div class="card">
+      <h2>Forward kinematics: angles &rarr; where is the tip?</h2>
+      <table class="t">
+        <tr><th>Tip position</th><td id="fTip">-</td><th>Tool pitch</th><td id="fPhi">-</td></tr>
+        <tr><th>Waist turn (yaw)</th><td id="fYaw">-</td><th>Link angles a1 / a2 / a3</th><td id="fA">-</td></tr>
+        <tr><th>Shoulder</th><td id="fSh">-</td><th>Elbow</th><td id="fEl">-</td></tr>
+        <tr><th>Wrist</th><td id="fWr">-</td><th>r, z of tip</th><td id="fRZ">-</td></tr>
+      </table>
+      <div class="cap">The numbers follow the sliders. The arm only moves when you press Move arm.</div>
+    </div>
+
+    <div class="card">
+      <div class="tabs">
+        <button id="tabIK" class="on">Inverse kinematics</button>
+        <button id="tabCode">Write code</button>
+      </div>
+
+      <div id="paneIK">
+        <p style="margin-top:0">Type where the gripper tip should be. IK works out the joint angles.</p>
+        <div class="grid4">
+          <label>x forward (mm)<input type="number" id="ix" value="260" step="5"></label>
+          <label>y left (mm)<input type="number" id="iy" value="80" step="5"></label>
+          <label>z up (mm)<input type="number" id="iz" value="250" step="5"></label>
+          <label>tool pitch (deg)<input type="number" id="iphi" value="0" step="5"></label>
+        </div>
+        <div class="actions">
+          <button id="btnSolve">Solve (just show the angles)</button>
+          <button id="btnSolveMove" class="primary">Solve and move arm</button>
+        </div>
+        <div id="ikMsg" class="msg"></div>
+        <p class="ref">Pitch 0 = gripper pointing forward, negative = pointing down. If the target is solvable, the sliders jump to the answer so you can compare them with the FK numbers above.</p>
+      </div>
+
+      <div id="paneCode" class="hide">
+        <div class="actions" style="margin:0 0 8px">
+          <select id="examples"></select>
+          <button id="btnRun" class="primary">Run</button>
+          <button id="btnStopCode" class="danger">Stop</button>
+        </div>
+        <textarea id="code" spellcheck="false" wrap="off"></textarea>
+        <pre class="out" id="out">Output appears here.</pre>
+        <p class="ref">
+          Edit the numbers marked <code>(edit me)</code> and press Run. The equations are plain Python: <code>sin cos atan2 acos sqrt radians degrees pi</code>.
+          Helpers: <code>to_link_angles(s0,s1,s2,s3)</code> servo degrees to link angles, <code>to_servo(yaw,a1,bend2,bend3)</code> link angles to servo degrees.
+          Arm: <code>move(a0,a1,a2,a3)</code> <code>move_xyz(x,y,z,pitch)</code> <code>home()</code> <code>pose()</code> <code>wait(s)</code>.
+          Built-in answers to compare with: <code>fk(a0,a1,a2,a3)</code> gives <code>(x,y,z,pitch)</code>, <code>ik(x,y,z,pitch)</code> gives the angles or <code>None</code>. No <code>import</code>.
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = null;                    // server state
+let angles = [90, 90, 90, 60, 90, 90];
+let busy = false;
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return r.json();
+}
+function say(el, text, kind) { el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+const f1 = v => (Math.round(v * 10) / 10).toFixed(1);
+
+/* ---------- joints ---------- */
+const JOINT_HELP = ['turns the whole arm', 'lifts the upper arm', 'bends the forearm', 'tilts the gripper up / down', 'rolls the gripper', 'opens / closes the gripper'];
+function buildJoints() {
+  const box = $('joints'); box.innerHTML = '';
+  S.names.forEach((n, i) => {
+    const d = document.createElement('div'); d.className = 'joint';
+    d.innerHTML = `<div class="row"><span class="name">${n[0].toUpperCase() + n.slice(1)}</span><span class="ch">ch ${i}</span>
+      <input type="number" id="n${i}" min="${S.lo[i]}" max="${S.hi[i]}" step="0.5"></div>
+      <input type="range" id="r${i}" min="${S.lo[i]}" max="${S.hi[i]}" step="0.5">
+      <div class="cap">${JOINT_HELP[i]}</div>`;
+    box.appendChild(d);
+    const r = d.querySelector('input[type=range]'), nm = d.querySelector('input[type=number]');
+    r.addEventListener('input', () => { setAngle(i, +r.value, 'r'); });
+    nm.addEventListener('input', () => { if (nm.value !== '') setAngle(i, +nm.value, 'n'); });
+    r.addEventListener('change', () => { if ($('onRelease').checked) moveArm(); });
+    nm.addEventListener('change', () => { if ($('onRelease').checked) moveArm(); });
+  });
+  showAngles();
+}
+function showAngles() { angles.forEach((v, i) => { $('r' + i).value = v; $('n' + i).value = f1(v); }); drawFK(); }
+function setAngle(i, v, from) {
+  angles[i] = Math.min(S.hi[i], Math.max(S.lo[i], v));
+  if (from !== 'r') $('r' + i).value = angles[i];
+  if (from !== 'n') $('n' + i).value = f1(angles[i]);
+  drawFK();
+}
+
+/* ---------- FK readout + drawing ---------- */
+let fkTimer = null, lastFK = null;
+function drawFK() { clearTimeout(fkTimer); fkTimer = setTimeout(async () => { const r = await api('/api/fk', { angles }); if (r.ok) { lastFK = r; renderFK(r); } }, 40); }
+function renderFK(r) {
+  const p = a => `(${a.map(f1).join(', ')})`;
+  $('fTip').textContent = p(r.tip) + ' mm'; $('fPhi').textContent = f1(r.phi) + '°';
+  $('fYaw').textContent = f1(r.yaw) + '°'; $('fA').textContent = `${f1(r.a1)}° / ${f1(r.a2)}° / ${f1(r.a3)}°`;
+  $('fSh').textContent = p(r.joints.shoulder); $('fEl').textContent = p(r.joints.elbow);
+  $('fWr').textContent = p(r.joints.wrist); $('fRZ').textContent = `${f1(r.r)}, ${f1(r.z)} mm`;
+}
+/* ---------- connection ---------- */
+function showState() {
+  $('status').textContent = S.connected ? 'connected' : 'not connected (preview only)';
+  $('status').className = 'status' + (S.connected ? ' on' : '');
+  $('btnConnect').classList.toggle('hide', S.connected); $('btnDisconnect').classList.toggle('hide', !S.connected);
+  $('port').disabled = S.connected;
+  const sel = $('port'), keep = sel.value; sel.innerHTML = '';
+  if (!S.ports.length) sel.innerHTML = '<option value="">no serial ports found</option>';
+  S.ports.forEach(p => { const o = document.createElement('option'); o.value = p.split(/\s/)[0]; o.textContent = p; sel.appendChild(o); });
+  if (keep) sel.value = keep;
+}
+async function refresh(adopt) {
+  S = await api('/api/state');
+  if (!$('joints').children.length) buildJoints();
+  showState();
+  if (adopt && S.pose) { angles = S.pose.slice(); showAngles(); }
+}
+$('btnRefresh').onclick = () => refresh(false);
+$('btnConnect').onclick = async () => {
+  if (!$('port').value) return say($('topmsg'), 'pick a port first', 'err');
+  say($('topmsg'), 'connecting, the arm goes home first (up to 25 s)...');
+  $('btnConnect').disabled = true;
+  const r = await api('/api/connect', { port: $('port').value });
+  $('btnConnect').disabled = false;
+  if (!r.ok) return say($('topmsg'), r.error, 'err');
+  say($('topmsg'), 'connected', 'ok'); await refresh(true);
+};
+$('btnDisconnect').onclick = async () => { await api('/api/disconnect', {}); say($('topmsg'), ''); refresh(false); };
+
+/* ---------- moving ---------- */
+async function moveArm() {
+  if (busy) return; busy = true; say($('moveMsg'), 'moving...');
+  const r = await api('/api/move', { angles });
+  busy = false;
+  if (!r.ok) return say($('moveMsg'), r.error, 'err');
+  angles = r.pose.slice(); showAngles(); say($('moveMsg'), 'arrived', 'ok');
+}
+$('btnSend').onclick = moveArm;
+$('btnHome').onclick = async () => {
+  if (busy) return; busy = true; say($('moveMsg'), 'going home...');
+  const r = await api('/api/home', {}); busy = false;
+  if (!r.ok) { angles = S.home.slice(); showAngles(); return say($('moveMsg'), r.error + ' (sliders set to home anyway)', 'err'); }
+  angles = r.pose.slice(); showAngles(); say($('moveMsg'), 'at home', 'ok');
+};
+$('btnRead').onclick = async () => {
+  const r = await api('/api/read', {});
+  if (!r.ok) return say($('moveMsg'), r.error, 'err');
+  angles = r.pose.slice(); showAngles(); say($('moveMsg'), 'pose read from the Arduino', 'ok');
+};
+$('btnStop').onclick = $('btnStopCode').onclick = () => api('/api/stop', {});
+
+/* ---------- IK ---------- */
+async function solve(move) {
+  const b = { x: $('ix').value, y: $('iy').value, z: $('iz').value, phi: $('iphi').value, move };
+  say($('ikMsg'), move ? 'solving and moving...' : 'solving...');
+  const r = await api('/api/ik', b);
+  if (!r.ok) return say($('ikMsg'), r.error, 'err');
+  angles = (r.pose || r.angles).slice(); showAngles();
+  say($('ikMsg'), 'angles: [' + r.angles.slice(0, 4).map(f1).join(', ') + ']' + (move ? ' (arm moved)' : ' (arm did not move)'), 'ok');
+}
+$('btnSolve').onclick = () => solve(false);
+$('btnSolveMove').onclick = () => solve(true);
+
+/* ---------- code ---------- */
+const EXAMPLES = {
+  'Forward kinematics (equations)': `# Forward kinematics: joint angles -> tip position
+L1, L2, L3, H = 140, 137, 84, 103     # link lengths in mm (edit me)
+s0, s1, s2, s3 = 90, 70, 100, 50      # servo angles (edit me)
+
+yaw, a1, bend2, bend3 = to_link_angles(s0, s1, s2, s3)   # servo degrees -> link angles
+a2 = a1 + bend2                       # forearm angle, measured from forward
+a3 = a2 + bend3                       # gripper angle (= tool pitch)
+
+r = L1*cos(radians(a1)) + L2*cos(radians(a2)) + L3*cos(radians(a3))
+z = H + L1*sin(radians(a1)) + L2*sin(radians(a2)) + L3*sin(radians(a3))
+x = r * cos(radians(yaw))
+y = r * sin(radians(yaw))
+
+print("tip:", round(x, 1), round(y, 1), round(z, 1), "pitch:", round(a3, 1))
+print("check with built-in fk():", fk(s0, s1, s2, s3))
+`,
+  'Inverse kinematics (equations)': `# Inverse kinematics: tip position -> joint angles
+L1, L2, L3, H = 140, 137, 84, 103     # link lengths in mm (edit me)
+x, y, z = 260, 80, 250                # where the tip should go, mm (edit me)
+pitch = 0                             # tool angle: 0 = forward, negative = down (edit me)
+
+yaw = degrees(atan2(y, x))            # waist turn
+r = sqrt(x*x + y*y)                   # distance out from the base
+rw = r - L3*cos(radians(pitch))       # wrist point: out
+zw = z - H - L3*sin(radians(pitch))   # wrist point: up from the shoulder
+
+c = (rw*rw + zw*zw - L1*L1 - L2*L2) / (2*L1*L2)   # law of cosines
+if abs(c) > 1:
+    print("out of reach")
+else:
+    d = -degrees(acos(c))             # elbow bend
+    a1 = degrees(atan2(zw, rw) - atan2(L2*sin(radians(d)), L1 + L2*cos(radians(d))))
+    wrist = pitch - (a1 + d)          # wrist bend
+    s = to_servo(yaw, a1, d, wrist)   # link angles -> servo angles
+    print("servo angles:", s)
+    print("check with built-in ik():", ik(x, y, z, pitch))
+    # move(s)                         # remove the # to move the arm
+`,
+  'FK then IK (round trip)': `# FK gives a position, IK should give the same angles back
+s = [80, 70, 100, 50]                 # servo angles (edit me)
+x, y, z, pitch = fk(s)
+print("tip:", round(x, 1), round(y, 1), round(z, 1), "pitch:", round(pitch, 1))
+back = ik(x, y, z, pitch)
+print("IK gives:", back)
+`,
+  'Move once': `# Move the joints to new angles, then read the pose back
+move(90, 60, 100, 40)
+print("pose:", pose())
+`,
+  'Sweep the waist': `# A loop: turn the waist step by step and print where the tip goes
+for a in range(60, 121, 20):
+    move(a, 90, 90, 60)
+    print("waist", a, "-> tip", fk(a, 90, 90, 60))
+home()
+`,
+  'Square in the air (IK)': `# Four corners, solved with IK
+corners = [(250, -60, 200), (250, 60, 200), (250, 60, 150), (250, -60, 150)]
+for c in corners:
+    a = ik(c[0], c[1], c[2], 0)
+    print(c, "->", a)
+    if a:
+        move(a)
+        wait(0.5)
+home()
+`
+};
+Object.keys(EXAMPLES).forEach(k => { const o = document.createElement('option'); o.textContent = k; $('examples').appendChild(o); });
+$('examples').onchange = () => { $('code').value = EXAMPLES[$('examples').value]; };
+$('code').value = EXAMPLES['Forward kinematics (equations)'];
+$('code').addEventListener('keydown', e => {
+  if (e.key === 'Tab') { e.preventDefault(); const t = e.target, s = t.selectionStart; t.value = t.value.slice(0, s) + '    ' + t.value.slice(t.selectionEnd); t.selectionStart = t.selectionEnd = s + 4; }
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('btnRun').click(); }
+});
+$('btnRun').onclick = async () => {
+  $('out').textContent = 'running...'; $('btnRun').disabled = true;
+  const r = await api('/api/run', { code: $('code').value });
+  $('btnRun').disabled = false;
+  $('out').textContent = r.ok ? (r.output || '(finished, nothing printed)') : r.error;
+  const s = await api('/api/state'); S = s; if (s.pose) { angles = s.pose.slice(); showAngles(); }
+};
+function tab(which) {
+  $('tabIK').classList.toggle('on', which === 'ik'); $('tabCode').classList.toggle('on', which === 'code');
+  $('paneIK').classList.toggle('hide', which !== 'ik'); $('paneCode').classList.toggle('hide', which !== 'code');
+}
+$('tabIK').onclick = () => tab('ik'); $('tabCode').onclick = () => tab('code');
+
+refresh(true).then(() => { if (!S.pose) { angles = S.home.slice(); showAngles(); } });
+</script>
+</body>
+</html>
