@@ -104,15 +104,12 @@ Python 3.10 with numpy and pyserial. Run from the project root. Replace `COM8` w
 | `python sim\_test_link.py` | Protocol test against a fake Arduino. No hardware needed |
 
 ```powershell
-cd "E:\Claude\Robotics Arm"
+cd path\to\Robotics-Arm
+pip install numpy pyserial
 python sim\arm_control.py --port COM8
 ```
 
-If `python` is not the 3.10 install:
-
-```powershell
-& "C:\Users\Samay Jain\AppData\Local\Programs\Python\Python310\python.exe" sim\arm_control.py --port COM8
-```
+If `python` is not on your PATH, call the interpreter by its full path (or use `py -3.10`).
 
 ### What it does
 - Opening the port usually resets the Arduino, so the arm first runs its power-up home move (up to about 12 s). The script waits, then reads the arm's own `lastSent[]` back.
