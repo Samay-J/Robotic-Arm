@@ -15,7 +15,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kinematics as K
 from kinematics import fk, ik, ik_branches, violations, LO, HI, HOME, MAX_DPS, H, L1, L2, L3
-NAMES = ['waist', 'shoulder', 'elbow', 'wrist', 'roll', 'grip']
+NAMES = ['waist', 'shoulder', 'elbow', 'roll', 'wrist', 'grip']
 
 
 class ArmLink:
@@ -138,25 +138,25 @@ def do_xyz(vals):
               'wrong way, flip its SIGN. Type "signs" to compare.')
     x, y, z = vals[:3]
     phi = vals[3] if len(vals) > 3 else fk(POSE)['phi_deg']     # no pitch given: keep the current one
-    q = ik(x, y, z, phi, POSE[4], POSE[5])
+    q = ik(x, y, z, phi, POSE[K.CH_ROLL], POSE[5])
     if q is None:
-        print('  IK failed,', why_not(x, y, z, phi, POSE[4], POSE[5])); return
+        print('  IK failed,', why_not(x, y, z, phi, POSE[K.CH_ROLL], POSE[5])); return
     print(f'  IK: servo angles = {fmt(q)}  (tool pitch {phi:.1f} deg)')
     print(f'  check: FK of that = {fmt(fk(q)["tip"])} mm')
     move_to(q)
 
 
 def predicted_motion():
-    """What a +10 deg command on each of s0..s3 should do to the real arm at HOME, from the current SIGN."""
+    """What a +10 deg command on each of the waist, shoulder, elbow and wrist-pitch channels should do to the real arm at HOME, from the current SIGN."""
     base = K.fk(HOME)
     rows = []
-    for i, name in enumerate(['waist', 'shoulder', 'elbow', 'wrist']):
+    for j, (i, name) in enumerate([(0, 'waist'), (1, 'shoulder'), (2, 'elbow'), (K.CH_PITCH, 'wrist')]):
         s = HOME.copy(); s[i] += 10
         n = K.fk(s)
-        if i == 0: txt = ('the whole arm turns to the LEFT (counter-clockwise seen from above)' if n['tip'][1] > 0
+        if j == 0: txt = ('the whole arm turns to the LEFT (counter-clockwise seen from above)' if n['tip'][1] > 0
                           else 'the whole arm turns to the RIGHT (clockwise seen from above)')
-        elif i == 1: txt = 'the upper arm leans ' + ('FORWARD, toward the side the gripper points' if n['elbow'][0] > 0 else 'BACKWARD, away from the side the gripper points')
-        elif i == 2: txt = 'the forearm leans ' + ('FORWARD, toward the side the gripper points' if n['wrist'][0] > base['wrist'][0] else 'BACKWARD, away from the side the gripper points')
+        elif j == 1: txt = 'the upper arm leans ' + ('FORWARD, toward the side the gripper points' if n['elbow'][0] > 0 else 'BACKWARD, away from the side the gripper points')
+        elif j == 2: txt = 'the forearm leans ' + ('FORWARD, toward the side the gripper points' if n['wrist'][0] > base['wrist'][0] else 'BACKWARD, away from the side the gripper points')
         else: txt = 'the gripper tilts ' + ('UP' if n['tip'][2] > base['tip'][2] else 'DOWN')
         rows.append(f'  channel {i} ({name:8s}) +10 deg: {txt}')
     return rows
@@ -179,7 +179,7 @@ def connect(port):
 
 
 HELP = """commands:
-  angles s0 s1 s2 s3 [s4 s5]   move to servo angles (degrees, 0-180); FK reports the tip
+  angles s0 s1 s2 s3 [s4 s5]   move to servo angles (channels: waist shoulder elbow roll wrist grip) (degrees, 0-180); FK reports the tip
   xyz x y z [phi]              move the tip to (x, y, z) mm; phi = tool pitch in deg, negative = down
   home                         go to HOME
   show                         read the pose from the Arduino and print it with the tip position

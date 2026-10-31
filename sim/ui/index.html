@@ -6,133 +6,127 @@
 <title>Robotics Arm Lab</title>
 <style>
   :root {
-    --bg: #f3f5f9; --card: #ffffff; --ink: #101a2e; --muted: #5b6880; --line: #dfe4ee; --soft: #f3f5f9;
-    --accent: #2f5bff; --accent-ink: #ffffff; --amber: #ffb02e; --ok: #14854f; --bad: #d03b2f;
-    --code-bg: #0c1424; --code-ink: #e6edf7; --gutter: #6b7a96;
-    --shadow: 0 1px 2px rgba(16,26,46,.06), 0 8px 24px rgba(16,26,46,.06);
+    --bg: #0a0a0a; --card: #101010; --ink: #f1efea; --muted: #8d8b86; --line: #262626; --soft: #171717;
+    --accent: #f1efea; --accent-ink: #0a0a0a; --ok: #f1efea; --bad: #cf8d85;
+    --code-bg: #070707; --code-ink: #e9e6de; --gutter: #5d5b57;
     --mono: ui-monospace, "Cascadia Code", Consolas, "SF Mono", monospace;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #0b1220; --card: #141e33; --ink: #e8edf6; --muted: #98a6bf; --line: #26334f; --soft: #0f192d;
-            --accent: #5b82ff; --ok: #3fc17f; --bad: #ff7b6e; --code-bg: #080e1b; --shadow: 0 8px 24px rgba(0,0,0,.35); }
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
 
   /* top bar */
-  .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; padding: 0 24px; height: 60px; background: var(--card); border-bottom: 1px solid var(--line); }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
-  .brand i { width: 14px; height: 14px; border-radius: 4px; background: var(--amber); box-shadow: 8px 8px 0 -3px var(--accent); }
+  .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: baseline; gap: 16px; padding: 22px 28px 18px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .brand { font: 600 13px/1 "Segoe UI", system-ui, sans-serif; letter-spacing: .28em; text-transform: uppercase; }
+  .brand a { margin-left: 22px; font-size: 13px; font-weight: 400; letter-spacing: .04em; text-transform: none; color: var(--muted); text-decoration: none; }
+  .brand a:hover { color: var(--ink); }
   .grow { flex: 1; }
   .conn { display: flex; align-items: center; gap: 8px; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
-  .dot.on { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .dot.on { background: var(--ok); }
   .state { font-size: 14px; color: var(--muted); min-width: 96px; }
 
   /* layout */
-  main { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 20px; padding: 20px 24px 40px; max-width: 1360px; margin: 0 auto; align-items: start; }
-  @media (max-width: 960px) { main { grid-template-columns: 1fr; padding: 16px; } .top { padding: 0 16px; } }
+  main { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px; padding: 24px 28px 48px; max-width: 1400px; margin: 0 auto; align-items: start; }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; padding: 16px; } .top { padding: 18px 16px 14px; } }
   .right { display: grid; gap: 20px; min-width: 0; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
-  .card > .hd { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 18px 20px 0; }
-  .card h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-  .card .bd { padding: 16px 20px 20px; }
-  .sub { color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 2px; }
+  .card > .hd { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 20px 22px 0; }
+  .card h2 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--ink); }
+  .card .bd { padding: 16px 22px 22px; }
+  .sub { color: var(--muted); font-size: 12.5px; }
 
   /* controls */
-  button, select, input[type=number] { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; }
-  button { cursor: pointer; font-weight: 600; transition: background .12s, border-color .12s, transform .05s; }
-  button:hover { border-color: var(--muted); }
-  button:active { transform: translateY(1px); }
-  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  button.primary:hover { filter: brightness(1.08); }
-  button.danger { color: var(--bad); }
+  button, select, input[type=number] { font: inherit; color: var(--ink); background: transparent; border: 1px solid #3a3a3a; border-radius: 2px; padding: 8px 14px; }
+  select { background: var(--card); }
+  button { cursor: pointer; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; transition: border-color .12s; }
+  button:hover { border-color: var(--ink); }
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
+  button.primary { background: var(--ink); border-color: var(--ink); color: var(--accent-ink); font-weight: 600; }
+  button.danger { color: var(--bad); border-color: #4a3835; }
   button.danger:hover { border-color: var(--bad); }
-  button:disabled { opacity: .5; cursor: default; }
+  button:disabled { opacity: .45; cursor: default; }
   input[type=number] { width: 100%; font-variant-numeric: tabular-nums; }
   .hide { display: none !important; }
 
   /* joints */
-  .group { margin: 4px 0 10px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-  .joint { padding: 10px 0 12px; border-top: 1px solid var(--line); }
+  .group { margin: 4px 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+  .joint { padding: 12px 0 14px; border-top: 1px solid var(--line); }
   .joint:first-of-type { border-top: none; padding-top: 0; }
-  .joint .row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .joint .row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
   .joint .name { font-weight: 600; flex: 1; }
-  .pill { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
-  .joint input[type=number] { width: 84px; text-align: right; padding: 5px 10px; }
-  .joint .help { color: var(--muted); font-size: 13px; margin-top: 6px; }
-  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 99px; margin: 8px 0 2px;
-    background: linear-gradient(to right, var(--accent) var(--p, 50%), var(--line) var(--p, 50%)); }
-  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--card); border: 3px solid var(--accent); cursor: grab; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
-  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--card); border: 3px solid var(--accent); cursor: grab; }
-  .bar { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; margin-top: 8px; }
-  .switch { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--muted); font-size: 14px; cursor: pointer; user-select: none; }
+  .pill { font-size: 11px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+  .joint input[type=number] { width: 84px; text-align: right; padding: 4px 10px; }
+  .joint .help { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 2px; margin: 12px 0 6px; outline: none;
+    background: linear-gradient(to right, var(--ink) var(--p, 50%), #333 var(--p, 50%)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); border: 3px solid var(--card); box-shadow: 0 0 0 1px var(--ink); cursor: grab; }
+  input[type=range]::-moz-range-thumb { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); border: 3px solid var(--card); box-shadow: 0 0 0 1px var(--ink); cursor: grab; }
+  .bar { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; margin-top: 12px; }
+  .switch { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--muted); font-size: 13px; cursor: pointer; user-select: none; }
   .switch input { position: absolute; opacity: 0; }
-  .switch span.t { width: 38px; height: 22px; border-radius: 99px; background: var(--line); position: relative; flex: none; transition: background .15s; }
-  .switch span.t::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
-  .switch input:checked + span.t { background: var(--accent); }
-  .switch input:checked + span.t::after { transform: translateX(16px); }
-  .switch input:focus-visible + span.t { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .switch span.t { width: 34px; height: 18px; border-radius: 99px; background: #333; position: relative; flex: none; transition: background .15s; }
+  .switch span.t::after { content: ""; position: absolute; left: 3px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+  .switch input:checked + span.t { background: var(--ink); }
+  .switch input:checked + span.t::after { transform: translateX(16px); background: var(--card); }
+  .switch input:focus-visible + span.t { outline: 1px solid var(--ink); outline-offset: 2px; }
 
   /* FK tiles */
   .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   @media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .tile { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
-  .tile .k { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-  .tile .v { font-size: 28px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 2px; }
-  .tile .u { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
-  .tile.x .v { color: var(--accent); } .tile.z .v { color: var(--ok); }
+  .tile { background: var(--soft); border: 1px solid var(--line); border-radius: 2px; padding: 14px 16px; }
+  .tile .k { font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  .tile .v { font-size: 26px; font-weight: 300; letter-spacing: .01em; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .tile .u { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 4px; letter-spacing: .04em; }
   details { margin-top: 14px; }
-  summary { cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 600; }
-  table.t { border-collapse: collapse; width: 100%; margin-top: 10px; font-variant-numeric: tabular-nums; font-size: 14px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; letter-spacing: .04em; }
+  table.t { border-collapse: collapse; width: 100%; margin-top: 10px; font-variant-numeric: tabular-nums; font-size: 13px; }
   table.t th, table.t td { text-align: left; padding: 6px 12px 6px 0; border-top: 1px solid var(--line); font-weight: 400; }
   table.t th { color: var(--muted); width: 28%; }
 
   /* tabs */
-  .seg { display: inline-flex; padding: 4px; gap: 4px; background: var(--soft); border: 1px solid var(--line); border-radius: 12px; }
-  .seg button { border: none; background: none; padding: 7px 16px; color: var(--muted); border-radius: 9px; }
-  .seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(16,26,46,.15); }
+  .seg { display: inline-flex; gap: 22px; border-bottom: 1px solid var(--line); width: 100%; }
+  .seg button { border: none; border-bottom: 1px solid transparent; margin-bottom: -1px; background: none; padding: 4px 0 10px; color: var(--muted); border-radius: 0; font-size: 12px; letter-spacing: .18em; }
+  .seg button.on { color: var(--ink); border-bottom-color: var(--ink); }
 
   /* IK */
   .inputs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
   @media (max-width: 640px) { .inputs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .inputs label { display: block; font-size: 13px; color: var(--muted); font-weight: 600; }
-  .inputs label span { display: block; margin-bottom: 4px; }
+  .inputs label { display: block; font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .inputs label span { display: block; margin-bottom: 6px; }
   .row-btn { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .chip { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; font-variant-numeric: tabular-nums; }
-  .chip b { color: var(--muted); font-weight: 600; font-size: 12px; margin-right: 6px; letter-spacing: .04em; text-transform: uppercase; }
-  .note { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
-  .msg { margin-top: 12px; font-size: 14px; min-height: 20px; }
-  .msg.err { color: var(--bad); } .msg.ok { color: var(--ok); }
+  .chip { background: var(--soft); border: 1px solid var(--line); border-radius: 2px; padding: 6px 12px; font-variant-numeric: tabular-nums; }
+  .chip b { color: var(--muted); font-weight: 600; font-size: 11px; margin-right: 8px; letter-spacing: .14em; text-transform: uppercase; }
+  .note { margin: 12px 0 0; font-size: 12.5px; color: var(--muted); }
+  .msg { margin-top: 12px; font-size: 13px; min-height: 20px; }
+  .msg.err { color: var(--bad); } .msg.ok { color: var(--ink); }
 
   /* code */
   .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
   .tools select { min-width: 250px; }
-  .tools .hint { margin-left: auto; font-size: 13px; color: var(--muted); }
-  kbd { font: 12px var(--mono); background: var(--soft); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 1px 6px; }
-  .editor { display: flex; background: var(--code-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
-  .gutter { margin: 0; padding: 14px 10px 14px 14px; text-align: right; color: var(--gutter); font: 14px/1.6 var(--mono); user-select: none; overflow: hidden; background: rgba(255,255,255,.03); min-width: 44px; white-space: pre; }
+  .tools .hint { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  kbd { font: 12px var(--mono); background: var(--soft); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 2px; padding: 1px 6px; }
+  .editor { display: flex; background: var(--code-bg); border-radius: 2px; overflow: hidden; border: 1px solid var(--line); }
+  .gutter { margin: 0; padding: 14px 10px 14px 14px; text-align: right; color: var(--gutter); font: 14px/1.6 var(--mono); user-select: none; overflow: hidden; background: rgba(255,255,255,.02); min-width: 44px; white-space: pre; }
   textarea { flex: 1; min-width: 0; height: 392px; border: none; outline: none; resize: vertical; padding: 14px 16px; background: transparent; color: var(--code-ink); font: 14px/1.6 var(--mono); tab-size: 4; white-space: pre; overflow: auto; border-radius: 0; }
-  .out-hd { margin: 16px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-  pre.out { margin: 0; min-height: 84px; max-height: 240px; overflow: auto; background: var(--code-bg); color: var(--code-ink); border-radius: 12px; padding: 14px 16px; font: 14px/1.6 var(--mono); white-space: pre-wrap; border: 1px solid var(--line); }
-  pre.out.err { color: #ff8e82; }
-  code { font: 13px var(--mono); background: var(--soft); border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; }
-  .cheat { font-size: 14px; color: var(--muted); line-height: 2; margin: 10px 0 0; }
+  .out-hd { margin: 18px 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+  pre.out { margin: 0; min-height: 84px; max-height: 240px; overflow: auto; background: var(--code-bg); color: var(--code-ink); border-radius: 2px; padding: 14px 16px; font: 14px/1.6 var(--mono); white-space: pre-wrap; border: 1px solid var(--line); }
+  pre.out.err { color: var(--bad); }
+  code { font: 13px var(--mono); background: var(--soft); border: 1px solid var(--line); padding: 1px 6px; border-radius: 2px; }
+  .cheat { font-size: 13px; color: var(--muted); line-height: 2; margin: 10px 0 0; }
 
   /* toast */
-  #toast { position: fixed; right: 20px; bottom: 20px; max-width: 420px; padding: 12px 16px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 14px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .18s, transform .18s; z-index: 10; }
+  #toast { position: fixed; right: 24px; bottom: 24px; max-width: 420px; padding: 12px 16px; border-radius: 2px; background: var(--ink); color: var(--bg); font-size: 13px; opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .18s, transform .18s; z-index: 10; }
   #toast.show { opacity: 1; transform: none; }
-  #toast.err { background: var(--bad); color: #fff; } #toast.ok { background: var(--ok); color: #fff; }
+  #toast.err { background: var(--bad); color: #0a0a0a; } #toast.ok { background: var(--ink); color: var(--bg); }
 </style>
 </head>
 <body>
 <header class="top">
-  <div class="brand"><i></i>Robotics Arm Lab</div>
+  <div class="brand">Robotics Arm Lab<a href="/3d">3D view &rarr;</a></div>
   <div class="grow"></div>
-  <div class="conn">
+  <div class="conn" style="display:none">
     <select id="port" aria-label="Serial port" style="min-width:210px"></select>
     <button id="btnRefresh" title="Look for serial ports again" aria-label="Refresh ports">&#8635;</button>
     <button id="btnConnect" class="primary">Connect</button>
@@ -251,13 +245,13 @@ function toast(text, kind) {
 function say(el, text, kind) { el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
 
 /* ---------- joints ---------- */
-const JOINT_HELP = ['Turns the whole arm', 'Lifts the upper arm', 'Bends the forearm', 'Tilts the gripper up and down', 'Rolls the gripper', 'Opens and closes the gripper'];
+const JOINT_HELP = ['Turns the whole arm', 'Lifts the upper arm', 'Bends the forearm', 'Rolls the gripper', 'Tilts the gripper up and down', 'Opens and closes the gripper'];
 const paint = r => r.style.setProperty('--p', ((r.value - r.min) / (r.max - r.min) * 100) + '%');
 function buildJoints() {
   const box = $('joints'); box.innerHTML = '';
   S.names.forEach((n, i) => {
     if (i === 0) box.insertAdjacentHTML('beforeend', '<div class="group">Arm</div>');
-    if (i === 4) box.insertAdjacentHTML('beforeend', '<div class="group" style="margin-top:14px">Hand</div>');
+    if (i === 3) box.insertAdjacentHTML('beforeend', '<div class="group" style="margin-top:14px">Hand</div>');
     const d = document.createElement('div'); d.className = 'joint';
     d.innerHTML = `<div class="row"><span class="name">${n[0].toUpperCase() + n.slice(1)}</span><span class="pill">ch ${i}</span>
       <input type="number" id="n${i}" min="${S.lo[i]}" max="${S.hi[i]}" step="0.5" aria-label="${n} angle"></div>
@@ -351,7 +345,7 @@ async function solve(move) {
   const r = await api('/api/ik', b);
   if (!r.ok) return say($('ikMsg'), r.error, 'err');
   angles = (r.pose || r.angles).slice(); showAngles();
-  $('ikChips').innerHTML = r.angles.slice(0, 4).map((v, i) => `<div class="chip"><b>${JN[i]}</b>${f1(v)}°</div>`).join('');
+  $('ikChips').innerHTML = [0, 1, 2, 4].map(k => r.angles[k]).map((v, i) => `<div class="chip"><b>${JN[i]}</b>${f1(v)}°</div>`).join('');
   say($('ikMsg'), move ? 'Solved. The arm moved.' : 'Solved. The arm did not move.', 'ok');
 }
 $('btnSolve').onclick = () => solve(false);
@@ -359,44 +353,6 @@ $('btnSolveMove').onclick = () => solve(true);
 
 /* ---------- code ---------- */
 const EXAMPLES = {
-  'Forward kinematics (equations)': `# Forward kinematics: joint angles -> tip position
-L1, L2, L3, H = 140, 137, 84, 103     # link lengths in mm (edit me)
-s0, s1, s2, s3 = 90, 70, 100, 50      # servo angles (edit me)
-
-yaw, a1, bend2, bend3 = to_link_angles(s0, s1, s2, s3)   # servo degrees -> link angles
-a2 = a1 + bend2                       # forearm angle, measured from forward
-a3 = a2 + bend3                       # gripper angle (= tool pitch)
-
-r = L1*cos(radians(a1)) + L2*cos(radians(a2)) + L3*cos(radians(a3))
-z = H + L1*sin(radians(a1)) + L2*sin(radians(a2)) + L3*sin(radians(a3))
-x = r * cos(radians(yaw))
-y = r * sin(radians(yaw))
-
-print("tip:", round(x, 1), round(y, 1), round(z, 1), "pitch:", round(a3, 1))
-print("check with built-in fk():", fk(s0, s1, s2, s3))
-`,
-  'Inverse kinematics (equations)': `# Inverse kinematics: tip position -> joint angles
-L1, L2, L3, H = 140, 137, 84, 103     # link lengths in mm (edit me)
-x, y, z = 260, 80, 250                # where the tip should go, mm (edit me)
-pitch = 0                             # tool angle: 0 = forward, negative = down (edit me)
-
-yaw = degrees(atan2(y, x))            # waist turn
-r = sqrt(x*x + y*y)                   # distance out from the base
-rw = r - L3*cos(radians(pitch))       # wrist point: out
-zw = z - H - L3*sin(radians(pitch))   # wrist point: up from the shoulder
-
-c = (rw*rw + zw*zw - L1*L1 - L2*L2) / (2*L1*L2)   # law of cosines
-if abs(c) > 1:
-    print("out of reach")
-else:
-    d = -degrees(acos(c))             # elbow bend
-    a1 = degrees(atan2(zw, rw) - atan2(L2*sin(radians(d)), L1 + L2*cos(radians(d))))
-    wrist = pitch - (a1 + d)          # wrist bend
-    s = to_servo(yaw, a1, d, wrist)   # link angles -> servo angles
-    print("servo angles:", s)
-    print("check with built-in ik():", ik(x, y, z, pitch))
-    # move(s)                         # remove the # to move the arm
-`,
   'FK then IK (round trip)': `# FK gives a position, IK should give the same angles back
 s = [80, 70, 100, 50]                 # servo angles (edit me)
 x, y, z, pitch = fk(s)
@@ -423,6 +379,44 @@ for c in corners:
         move(a)
         wait(0.5)
 home()
+`,
+  'Forward kinematics (equations)': `# Forward kinematics: joint angles -> tip position
+L1, L2, L3, H = 140, 131.2, 100.2, 93.8   # link lengths in mm, from the CAD (edit me)
+s0, s1, s2, s3 = 90, 70, 100, 50      # servo angles (edit me)
+
+yaw, a1, bend2, bend3 = to_link_angles(s0, s1, s2, s3)   # servo degrees -> link angles
+a2 = a1 + bend2                       # forearm angle, measured from forward
+a3 = a2 + bend3                       # gripper angle (= tool pitch)
+
+r = L1*cos(radians(a1)) + L2*cos(radians(a2)) + L3*cos(radians(a3))
+z = H + L1*sin(radians(a1)) + L2*sin(radians(a2)) + L3*sin(radians(a3))
+x = r*cos(radians(yaw))               # the waist spins the reach into x and y
+y = r*sin(radians(yaw))
+
+print("tip:", round(x, 1), round(y, 1), round(z, 1), "pitch:", round(a3, 1))
+print("check with built-in fk():", fk(s0, s1, s2, s3))
+`,
+  'Inverse kinematics (equations)': `# Inverse kinematics: tip position -> joint angles
+L1, L2, L3, H = 140, 131.2, 100.2, 93.8   # link lengths in mm, from the CAD (edit me)
+x, y, z = 260, 80, 250                # where the tip should go, mm (edit me)
+pitch = 0                             # tool angle: 0 = forward, negative = down (edit me)
+
+r = sqrt(x*x + y*y)                   # reach inside the arm plane
+yaw = degrees(atan2(y, x))            # waist turn
+rw = r - L3*cos(radians(pitch))       # wrist point: out
+zw = z - H - L3*sin(radians(pitch))   # wrist point: up from the shoulder
+
+c = (rw*rw + zw*zw - L1*L1 - L2*L2) / (2*L1*L2)   # law of cosines
+if abs(c) > 1:
+    print("out of reach")
+else:
+    d = -degrees(acos(c))             # elbow bend
+    a1 = degrees(atan2(zw, rw) - atan2(L2*sin(radians(d)), L1 + L2*cos(radians(d))))
+    wrist = pitch - (a1 + d)          # wrist bend
+    s = to_servo(yaw, a1, d, wrist)   # link angles -> servo angles
+    print("servo angles:", s)
+    print("check with built-in ik():", ik(x, y, z, pitch))
+    # move(s)                         # remove the # to move the arm
 `
 };
 const code = $('code'), gutter = $('gutter');
@@ -431,7 +425,7 @@ code.addEventListener('input', numbers);
 code.addEventListener('scroll', () => { gutter.scrollTop = code.scrollTop; });
 Object.keys(EXAMPLES).forEach(k => { const o = document.createElement('option'); o.textContent = k; $('examples').appendChild(o); });
 $('examples').onchange = () => { code.value = EXAMPLES[$('examples').value]; numbers(); };
-code.value = EXAMPLES['Forward kinematics (equations)']; numbers();
+code.value = EXAMPLES[$('examples').value = Object.keys(EXAMPLES)[0]]; numbers();
 code.addEventListener('keydown', e => {
   if (e.key === 'Tab') { e.preventDefault(); const s = code.selectionStart; code.value = code.value.slice(0, s) + '    ' + code.value.slice(code.selectionEnd); code.selectionStart = code.selectionEnd = s + 4; numbers(); }
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('btnRun').click(); }

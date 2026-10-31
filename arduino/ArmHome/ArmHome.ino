@@ -5,20 +5,20 @@
     0  MG995  waist     (Rotating_Waste yaw, vertical axis)
     1  MG995  shoulder  (Arm_1 pitch)
     2  MG995  elbow     (Arm_2 pitch)
-    3  SG90   wrist pitch
-    4  SG90   wrist roll
+    3  SG90   wrist roll
+    4  SG90   wrist pitch
     5  SG90   gripper
 
   No feedback exists, so "where the arm is" == "the last angle we sent".
   lastSent[] is that belief. It is mirrored to EEPROM after every move so a
   reset/power cycle starts from the real pose instead of snapping to a guess.
 
-  Angle meaning, from the photo of the real arm at HOME = {63, 63, 49.3, 19.9, 123.7, 58.9}
-  (the same pose as the old {90, 90, 75, 45, 165, 90}, re-expressed for the 150..600 tick mapping):
-    waist    63    = straight ahead
-    shoulder 63    = upper arm vertical
-    elbow    49.3  = forearm in line with the upper arm (straight)
-    wrist    97.8  = gripper in line with the forearm; HOME's 19.9 holds it level, pointing forward
+  Angle meaning at HOME = {90, 90, 90, 60, 90, 90} (confirmed on the real arm: it stands straight up):
+    waist    90    = straight ahead
+    shoulder 90    = upper arm vertical
+    elbow    90    = forearm in line with the upper arm (straight)
+    wrist    90    = gripper in line with the forearm, pointing straight up (channel 4)
+    roll     60    = channel 3, does not move the tip
   One servo degree now turns a joint about 1.1 physical degrees (see GAIN in sim/kinematics.py).
   Which way each servo turns is not confirmed; see RUNBOOK.md and sim/kinematics.py (SIGN).
 

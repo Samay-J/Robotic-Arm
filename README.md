@@ -1,8 +1,8 @@
 # Robotics Arm
 
-6-DOF arm. 3 x MG995 (waist, shoulder, elbow) + 3 x SG90 (wrist pitch, wrist roll, gripper) on a PCA9685, channels 0 to 5, no encoders. Controlled from the PC (Python) over serial through an Arduino-IDE sketch.
+6-DOF arm. 3 x MG995 (waist, shoulder, elbow) + 3 x SG90 (wrist roll, wrist pitch, gripper) on a PCA9685, channels 0 to 5, no encoders. Controlled from the PC (Python) over serial through an Arduino-IDE sketch.
 
-Joints (PCA9685 channel = joint number): **0 waist, 1 shoulder, 2 elbow, 3 wrist pitch, 4 wrist roll, 5 gripper.**
+Joints (PCA9685 channel = joint number): **0 waist, 1 shoulder, 2 elbow, 3 wrist roll, 4 wrist pitch, 5 gripper.**
 Angles are servo degrees (0 to 180 = PCA ticks 150 to 600). Positions are in mm: **x forward, y left, z up**, from the ground at the waist axis.
 
 ## Contents
@@ -31,7 +31,9 @@ Robotics Arm\
   sim\kinematics.py                 FK / IK + calibration constants + 20,000-pose self-test
   sim\_test_link.py                 tests the serial protocol against a fake board
   sim\_views.py, sim\_ortho.py      CAD inspection helpers (STL renders), not used by arm_control.py
-  photo\home_real.png               photo of the real arm used to calibrate kinematics.py
+  sim\build_cad_model.py            reads the SolidWorks assembly dump and writes sim\ui\cad_model.json (lengths, joint axes, part placement)
+  sim\ui\arm3d.html                 3D page built from the assembly (served at /3d)
+  photo\home_real.png               photo of the real arm
   README.md                         this file
 ```
 
@@ -55,7 +57,7 @@ Robotics Arm\
 | SDA | A4 |
 | SCL | A5 |
 | V+ (terminal block) | separate 5 to 6 V supply for the servos, sized for the MG995 stall current |
-| Channel 0 to 5 | waist, shoulder, elbow, wrist pitch, wrist roll, gripper |
+| Channel 0 to 5 | waist, shoulder, elbow, wrist roll, wrist pitch, gripper |
 
 Do not power the servos from the Arduino 5 V pin.
 
@@ -124,6 +126,8 @@ If `python` is not on your PATH, call the interpreter by its full path (or use `
 python sim\arm_ui.py                  # opens http://127.0.0.1:8000, connect to the board inside the page
 python sim\arm_ui.py --port COM8      # connect first
 ```
+
+The **3D view** (`http://127.0.0.1:8000/3d`, linked from the top bar) shows the arm built from the CAD assembly in black and white. Each joint has a slider, a Spin button and a ring showing the axis it turns about, and the tool-tip position is read from the model. The serial port and Connect controls are hidden in the lab page; connect with `python sim\arm_ui.py --port COM8`.
 
 - **Sliders** for the six joints, with the forward-kinematics numbers (tip position, tool pitch, waist angle, link angles) updating as you drag. Move arm sends the pose; "move the arm when I let go of a slider" does it automatically.
 - **Inverse kinematics** tab: type x, y, z and tool pitch. Solve (just shows the angles, the sliders jump to them) or Solve and move arm.
@@ -314,7 +318,7 @@ Put `kinematics.h` next to `ArmHome.ino`:
 ```cpp
 #include "kinematics.h"
 
-float q[6] = { 0, 0, 0, 0, lastSent[4], lastSent[5] };   // keep roll and gripper
+float q[6] = { 0, 0, 0, lastSent[3], 0, lastSent[5] };   // keep roll (ch 3) and gripper
 if (kin::ik(200, 80, 60, -60, q)) moveTo(q);               // false = unreachable, arm stays
 kin::Pose p = kin::fk(lastSent);                           // p.x, p.y, p.z, p.phi
 ```
@@ -329,26 +333,37 @@ Planar 3-link arm with a waist yaw. Constants at the top of `sim\kinematics.py` 
 
 | Constant | Value | Where it came from |
 |---|---|---|
-| `L1` | 140 mm | CAD, Arm_1 hole to hole (the photo agrees) |
-| `H` | 103 mm | Photo; CAD gives 98 plus the thickness of the star feet |
-| `L2` | 137 mm | Photo, elbow axis to wrist axis |
-| `L3` | 84 mm | Photo, wrist axis to gripper tips |
-| `WAIST_ZERO` | 62.95 | Waist straight ahead |
-| `SHOULDER_ZERO` | 62.95 | Upper arm vertical |
-| `ELBOW_ZERO` | 49.29 | Forearm in line with the upper arm |
-| `WRIST_ZERO` | 97.79 | Gripper in line with the forearm |
+| `H` | 93.8 mm | CAD assembly, underside of the feet to the shoulder axis |
+| `L1` | 140.0 mm | CAD assembly, shoulder axis to elbow axis |
+| `L2` | 131.2 mm | CAD assembly, elbow axis to the wrist-pitch axis |
+| `L3` | 100.2 mm | CAD assembly, wrist-pitch axis to the middle of the jaw tips |
+| `TOOL_OFF` | 4.0 deg | The pivot-to-tip line is 4 degrees off the gripper body axis |
+| `LAT` | 4.4 mm | The tip really sits this far left of the arm plane (roll at `ROLL_ZERO`). A constant: FK and IK ignore it |
+| `ROLL_ZERO` | 60 | Roll angle where the pitch hinge is parallel to the elbow hinge (confirmed: the jaws open sideways at HOME roll 60) |
+| `WAIST_ZERO` | 90 | Waist straight ahead |
+| `SHOULDER_ZERO` | 90 | Upper arm vertical |
+| `ELBOW_ZERO` | 90 | Forearm in line with the upper arm |
+| `WRIST_ZERO` | 90 | Gripper in line with the forearm (channel 4, the wrist pitch) |
 | `GAIN` | 1.098, 1.098, 1.098, 1.1558 | Physical degrees per servo degree |
 
-The photo scale (about 1.75 px/mm) comes from the MG995 size, so `H`, `L2`, `L3` are good to about 10 %. Measure with a ruler and edit them.
+The lengths were measured on `Arm_Bot_STLs\CADs\5_DOF_ARM_Assembly.SLDASM` (joint axes from its mates). Rebuild them with `python sim\build_cad_model.py` if the CAD changes; it needs `sim\ui\assembly.json`, `part_boxes.json` (dumped once through SolidWorks). The servo bodies are suppressed in that assembly, so the 3D page draws plain boxes for them.
 
-**The zeros were calibrated for an older home pose** (upper arm and forearm vertical, gripper level, at servo `63, 63, 49.3, 19.9`). With the sketch's current HOME `{90, 90, 90, 60, 90, 90}` the model puts the tip at about (33, 19, 401) mm with the tool tilted 31 degrees up. If the real arm stands upright at the current HOME, the zeros need to move to match (shoulder and elbow zero 90, wrist zero 60 plus whatever makes the gripper level); otherwise `xyz` targets land in the wrong place.
+**Joint order in the real arm:** waist, shoulder, elbow, then **roll about the forearm axis (ch 3)**, then **pitch (ch 4)** on a hinge that the roll carries, then the jaws. With roll at `ROLL_ZERO` the whole arm is planar and the FK / IK below are exact (the 3D page agrees with them to 0.1 mm). Rolling away from that swings the gripper out of the arm plane; only the 3D page models that.
+
+**The zeros match the sketch's HOME `{90, 90, 90, 60, 90, 90}`**, where the real arm stands straight up with the gripper pointing up (confirmed). The tip is then at about (-7, 4.4, 465) mm. Wrist roll is channel 3 and wrist pitch is channel 4; in the Python code box the student order stays waist, shoulder, elbow, wrist, roll, grip.
+
+### How FK and IK work (equations)
+Both are plain trigonometry, in `sim\kinematics.py` and in the Write code box (`to_link_angles`, `to_servo`).
+
+* **FK:** servo degrees become link angles first (`to_link_angles`). Each angle is added onto the one before it: `a2 = a1 + bend2`, `a3 = a2 + bend3` (= tool pitch). Then `r = L1 cos a1 + L2 cos a2 + L3 cos a3` and `z = H + L1 sin a1 + L2 sin a2 + L3 sin a3`. The waist yaw spins that reach into `x = r cos(yaw)` and `y = r sin(yaw)`.
+* **IK:** (1) the waist: `yaw = atan2(y, x)` and `r = sqrt(x^2 + y^2)`. (2) With the chosen tool pitch, step back along the gripper to the wrist point `(rw, zw) = (r - L3 cos pitch, z - H - L3 sin pitch)`. (3) Two links remain, so the law of cosines gives `cos d = (rw^2 + zw^2 - L1^2 - L2^2) / (2 L1 L2)` for the elbow bend `d`, and the shoulder is `a1 = atan2(zw, rw) - atan2(L2 sin d, L1 + L2 cos d)`. The two signs of `d` are the two elbow solutions; limits then pick one, and `|cos d| > 1` means out of reach.
 
 ### Joint directions (`SIGN`)
 A photo cannot show which way a servo turns, so `SIGN` is a guess (`[1, 1, -1, 1]`). Check once:
 
 1. Connect and send `home`.
 2. Type `signs` to see what +10 degrees on each joint should do.
-3. On the real arm send each, for example `angles 100 90 90 60` (waist), `angles 90 100 90 60` (shoulder), `angles 90 90 100 60` (elbow), `angles 90 90 90 70` (wrist), then `home` again.
+3. On the real arm send each, for example `angles 100 90 90 60 90 90` (waist), `angles 90 100 90 60 90 90` (shoulder), `angles 90 90 100 60 90 90` (elbow), `angles 90 90 90 60 100 90` (wrist pitch, channel 4), then `home` again.
 4. Where the real arm moves the other way, flip that joint's entry in `SIGN` (+1 / -1) in `sim\kinematics.py` and `kinematics.h`.
 5. When all four match, set `SIGNS_VERIFIED = True` (or just use `trust`).
 
@@ -380,7 +395,8 @@ A photo cannot show which way a servo turns, so `SIGN` is a guess (`[1, 1, -1, 1
 | `xyz` lands in the wrong place | Check the zeros (section 7), the joint directions (`signs`) and the link lengths |
 
 ## 10. Known limits
-- The channel-to-joint order and joint directions are assumptions; link lengths come from the CAD and a photo (about 10 % accurate). There is no assembly in the folder.
+- Joint directions (`SIGN`) and the servo gains are not verified on the real arm. Lengths come from the CAD assembly, not from the built arm.
+- IK assumes the roll is at `ROLL_ZERO`.
 - The sketch has not been compiled in this project; expect to fix small things on the first compile.
 - No collision or torque model.
 - Without encoders, the believed position is only as good as the servo's ability to follow the commands.

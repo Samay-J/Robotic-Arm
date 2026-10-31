@@ -75,9 +75,9 @@ def merged(vals):
 
 def solve_ik(x, y, z, phi):
     cur = current_pose()
-    q = K.ik(x, y, z, phi, cur[4], cur[5])
+    q = K.ik(x, y, z, phi, cur[K.CH_ROLL], cur[5])
     if q is None:
-        return None, ac.why_not(x, y, z, phi, cur[4], cur[5])
+        return None, ac.why_not(x, y, z, phi, cur[K.CH_ROLL], cur[5])
     return q, ''
 
 
@@ -113,35 +113,42 @@ def run_student(code):
             a = a[0]
         return [float(v) for v in a]
 
+    def sw(v):                       # student order (waist, shoulder, elbow, wrist, roll, grip) <-> channel order (..., roll, wrist, grip)
+        v = list(v)
+        if len(v) >= 5: v[3], v[4] = v[4], v[3]
+        return v
+
     def move(*a):
         v = flat(a)
         if not 4 <= len(v) <= 6:
             raise ArmError('move() needs 4 to 6 angles: move(waist, shoulder, elbow, wrist [, roll, grip])')
-        return [round(float(x), 1) for x in do_move(merged(v))]
+        g = sw(current_pose()); g[:len(v)] = v
+        return sw([round(float(x), 1) for x in do_move(sw(g))])
 
     def move_xyz(x, y, z, phi=None):
         phi = K.fk(current_pose())['phi_deg'] if phi is None else phi
         q, why = solve_ik(x, y, z, phi)
         if q is None:
             raise ArmError('IK failed: ' + why)
-        return move(q)
+        return move(sw(q))
 
     def fk(*a):
         v = flat(a)
         if len(v) < 4:
             raise ArmError('fk() needs 4 angles: fk(waist, shoulder, elbow, wrist)')
-        f = K.fk(merged(v))
+        g = sw(current_pose()); g[:len(v)] = v
+        f = K.fk(sw(g))
         return (round(float(f['tip'][0]), 3), round(float(f['tip'][1]), 3), round(float(f['tip'][2]), 3), round(f['phi_deg'], 3))
 
     def ik(x, y, z, phi=0):
         q, _ = solve_ik(x, y, z, phi)
-        return None if q is None else [round(float(v), 1) for v in q]
+        return None if q is None else sw([round(float(v), 1) for v in q])
 
     def home():
-        return move(K.HOME)
+        return move(sw(K.HOME))
 
     def pose():
-        return [round(float(v), 1) for v in current_pose()]
+        return sw([round(float(v), 1) for v in current_pose()])
 
     def wait(sec):
         end = time.time() + min(float(sec), 30)
@@ -158,12 +165,12 @@ def run_student(code):
             raise ArmError('to_link_angles() needs 4 servo angles')
         g, s = K.GAIN, K.SIGN
         return (round(float(s[0] * g[0] * (v[0] - K.WAIST_ZERO)), 3), round(float(90 + s[1] * g[1] * (v[1] - K.SHOULDER_ZERO)), 3),
-                round(float(s[2] * g[2] * (v[2] - K.ELBOW_ZERO)), 3), round(float(s[3] * g[3] * (v[3] - K.WRIST_ZERO)), 3))
+                round(float(s[2] * g[2] * (v[2] - K.ELBOW_ZERO)), 3), round(float(s[3] * g[3] * (v[3] - K.WRIST_ZERO) + K.TOOL_OFF), 3))
 
     def to_servo(yaw, a1, bend2, bend3):
         g, s = K.GAIN, K.SIGN
         return [round(float(K.WAIST_ZERO + yaw * s[0] / g[0]), 2), round(float(K.SHOULDER_ZERO + (wrap_deg(a1) - 90) * s[1] / g[1]), 2),
-                round(float(K.ELBOW_ZERO + wrap_deg(bend2) * s[2] / g[2]), 2), round(float(K.WRIST_ZERO + wrap_deg(bend3) * s[3] / g[3]), 2)]
+                round(float(K.ELBOW_ZERO + wrap_deg(bend2) * s[2] / g[2]), 2), round(float(K.WRIST_ZERO + (wrap_deg(bend3) - K.TOOL_OFF) * s[3] / g[3]), 2)]
 
     env = dict(__builtins__=dict(SAFE_BUILTINS, print=_print), math=math, pi=math.pi, sin=math.sin, cos=math.cos, sqrt=math.sqrt,
                atan2=math.atan2, acos=math.acos, to_link_angles=to_link_angles, to_servo=to_servo, radians=math.radians, degrees=math.degrees,
@@ -211,7 +218,10 @@ def state():
     pose = ac.POSE
     return dict(connected=ac.LINK is not None, pose=None if pose is None else [round(float(v), 1) for v in pose],
                 home=K.HOME.tolist(), lo=K.LO.tolist(), hi=K.HI.tolist(), ports=ports,
-                names=ac.NAMES, signs_verified=bool(K.SIGNS_VERIFIED))
+                names=ac.NAMES, signs_verified=bool(K.SIGNS_VERIFIED),
+                model=dict(H=K.H, L1=K.L1, L2=K.L2, L3=K.L3, lat=K.LAT, tool_off=K.TOOL_OFF, roll_zero=K.ROLL_ZERO,
+                           zero=[K.WAIST_ZERO, K.SHOULDER_ZERO, K.ELBOW_ZERO, K.WRIST_ZERO],
+                           gain=K.GAIN.tolist(), sign=K.SIGN.tolist()))
 
 
 def api(path, b):
@@ -263,14 +273,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', ctype); self.send_header('Content-Length', str(len(data)))
         self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(data)
 
+    TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.stl': 'application/octet-stream', '.json': 'application/json'}
+
     def do_GET(self):
-        if self.path in ('/', '/index.html'):
-            with open(os.path.join(HERE, 'ui', 'index.html'), 'rb') as f:
-                self._send(200, f.read(), 'text/html; charset=utf-8')
-        elif self.path == '/api/state':
-            self._send(200, json.dumps(api('/api/state', {})))
-        else:
-            self._send(404, '{}')
+        path = self.path.split('?')[0]
+        if path == '/api/state':
+            self._send(200, json.dumps(api('/api/state', {}))); return
+        path = {'/': '/index.html', '/3d': '/arm3d.html'}.get(path, path)
+        ui = os.path.join(HERE, 'ui')
+        full = os.path.normpath(os.path.join(ui, path.lstrip('/')))
+        ext = os.path.splitext(full)[1].lower()
+        if not full.startswith(ui + os.sep) or ext not in self.TYPES or not os.path.isfile(full):
+            self._send(404, '{}'); return
+        with open(full, 'rb') as f:
+            self._send(200, f.read(), self.TYPES[ext])
 
     def do_POST(self):
         try:

@@ -1,13 +1,20 @@
-"""FK / IK for the Robotics Arm, calibrated against the photo of the real arm at HOME.
+"""FK / IK for the Robotics Arm. Link lengths come from the SolidWorks assembly (sim/build_cad_model.py).
 
 Frame: origin on the ground at the waist axis, x forward, y left, z up (mm).
 All angles a1..a3 are absolute, in the vertical arm plane, measured from +x (forward) counter-clockwise.
+The gripper chain is waist -> shoulder -> elbow -> ROLL (about the forearm axis) -> PITCH (a hinge carried by the roll)
+-> jaws. This planar model holds with the roll at ROLL_ZERO, where the pitch hinge is parallel to the elbow hinge.
+FK and IK ignore the small sideways offset LAT of the tip (it is constant at ROLL_ZERO and the roll is not moved here).
+Rolling away from ROLL_ZERO swings the gripper out of the plane (the 3D page shows it); IK keeps the roll it is given and assumes ROLL_ZERO.
 
   waist    s0 : yaw = SIGN[0]*GAIN[0] * (s0 - WAIST_ZERO)             WAIST_ZERO = straight ahead
   shoulder s1 : a1  = 90 + SIGN[1]*GAIN[1] * (s1 - SHOULDER_ZERO)     SHOULDER_ZERO = upper arm vertical
   elbow    s2 : a2  = a1 + SIGN[2]*GAIN[2] * (s2 - ELBOW_ZERO)        ELBOW_ZERO = forearm in line with upper arm
-  wrist    s3 : a3  = a2 + SIGN[3]*GAIN[3] * (s3 - WRIST_ZERO)        WRIST_ZERO = gripper in line with forearm
-  roll s4, grip s5 do not move the tool tip.
+  roll     s3 : turns the gripper about its own axis, does not move the tip
+  wrist    s4 : a3  = a2 + SIGN[3]*GAIN[3] * (s4 - WRIST_ZERO)        WRIST_ZERO = gripper in line with forearm
+  grip     s5 : opens and closes the jaws, does not move the tip
+Channel order is waist, shoulder, elbow, roll, wrist pitch, grip. SIGN and GAIN have 4 entries: waist, shoulder,
+elbow, wrist pitch (the joints that place the tip).
 phi = a3 is the tool pitch (0 = pointing forward, -90 = pointing down).
 
 Servo angles use the sketch's mapping: 0..180 = 150..600 PCA9685 ticks (about 732..2928 us). GAIN is the physical
@@ -24,17 +31,20 @@ RUNBOOK.md and flip an entry to -1 if a joint moves the wrong way on the real ar
 """
 import numpy as np
 
-# Lengths in mm. L1 is the Arm_1 hole-to-hole distance (CAD). H, L2, L3 are measured from the photo
-# (scale from the MG995 servo size), so each is good to roughly +-10 %. Measure and edit.
-H = 103.0       # ground to shoulder axis
+# Lengths in mm, measured on the CAD assembly (python sim\build_cad_model.py prints them).
+H = 93.8        # underside of the feet to shoulder axis
 L1 = 140.0      # shoulder axis to elbow axis
-L2 = 137.0      # elbow axis to wrist axis
-L3 = 84.0       # wrist axis to gripper tips
+L2 = 131.2      # elbow axis to the wrist-pitch axis
+L3 = 100.2      # wrist-pitch axis to the middle of the jaw tips
+TOOL_OFF = 4.0  # deg: the pivot-to-tip line points this far from the gripper body axis (phi = a2 + bend3 + TOOL_OFF)
+LAT = 4.4       # mm: the tip really sits this far left of the waist plane at ROLL_ZERO (a constant; FK and IK ignore it)
 
-WAIST_ZERO = 62.95       # servo angle at which each joint is in its reference position (see top)
-SHOULDER_ZERO = 62.95
-ELBOW_ZERO = 49.29
-WRIST_ZERO = 97.79
+WAIST_ZERO = 90.0        # servo angle at which each joint is in its reference position (see top)
+SHOULDER_ZERO = 90.0
+ELBOW_ZERO = 90.0
+CH_ROLL, CH_PITCH = 3, 4   # channels of the wrist roll and wrist pitch servos
+WRIST_ZERO = 90.0
+ROLL_ZERO = 60.0         # roll servo angle at which the pitch hinge is parallel to the elbow hinge (= sketch HOME; confirmed: jaws open sideways)
 GAIN = np.array([1.098, 1.098, 1.098, 1.1558])   # physical degrees per servo degree for s0..s3
 # Direction of s0..s3: +1 = increasing the angle turns the joint counter-clockwise (x forward, z up, seen from
 # the arm's left side; waist: counter-clockwise from above). NOT visible in the photo, so these are guesses:
@@ -55,14 +65,14 @@ def abs_angles(s):
     """servo angles -> absolute link angles a1, a2, a3 (radians) and yaw (radians)."""
     a1 = np.radians(90 + SIGN[1] * GAIN[1] * (s[1] - SHOULDER_ZERO))
     a2 = a1 + np.radians(SIGN[2] * GAIN[2] * (s[2] - ELBOW_ZERO))
-    a3 = a2 + np.radians(SIGN[3] * GAIN[3] * (s[3] - WRIST_ZERO))
+    a3 = a2 + np.radians(SIGN[3] * GAIN[3] * (s[CH_PITCH] - WRIST_ZERO) + TOOL_OFF)   # direction of the pivot-to-tip line
     return a1, a2, a3, np.radians(SIGN[0] * GAIN[0] * (s[0] - WAIST_ZERO))
 
 
 def fk(s):
-    """servo angles (>= 4 values, deg) -> dict(tip, wrist, elbow, shoulder, phi_deg)."""
+    """servo angles (>= 5 values, deg) -> dict(tip, wrist, elbow, shoulder, phi_deg)."""
     a1, a2, a3, yaw = abs_angles(s)
-    def pt(r, z): return np.array([r * np.cos(yaw), r * np.sin(yaw), z])
+    def pt(r, z, lat=0.0): return np.array([r * np.cos(yaw) - lat * np.sin(yaw), r * np.sin(yaw) + lat * np.cos(yaw), z])
     r1, z1 = L1 * np.cos(a1), H + L1 * np.sin(a1)
     r2, z2 = r1 + L2 * np.cos(a2), z1 + L2 * np.sin(a2)
     r3, z3 = r2 + L3 * np.cos(a3), z2 + L3 * np.sin(a3)
@@ -88,29 +98,30 @@ def _solve(r, yaw, z, phi, roll, grip, side):
     return np.array([WAIST_ZERO + np.degrees(yaw) * g[0],
                      SHOULDER_ZERO + (np.degrees(a1) - 90) * g[1],
                      ELBOW_ZERO + np.degrees(d) * g[2],
-                     WRIST_ZERO + np.degrees(wrap(phi - a2)) * g[3],
-                     roll, grip])
+                     roll,
+                     WRIST_ZERO + np.degrees(wrap(phi - a2) - np.radians(TOOL_OFF)) * g[3],
+                     grip])
 
 
-def ik_branches(x, y, z, phi_deg, roll=90.0, grip=90.0):
+def ik_branches(x, y, z, phi_deg, roll=ROLL_ZERO, grip=90.0):
     """Both elbow solutions, limits NOT checked: [forward-bent, backward-bent], or [] if out of reach."""
     # waist only spans +-90 deg about +x, so a target with x < 0 is reached leaning BACK
     # (signed radius r < 0, waist turned toward the opposite side).
-    if x >= 0:
-        yaw, r = np.arctan2(y, x), np.hypot(x, y)
-    else:
-        yaw, r = np.arctan2(-y, -x), -np.hypot(x, y)
+    rho = np.hypot(x, y)
+    if rho < 1e-9: return []                                     # straight above the waist axis
+    r = rho * (1 if x >= 0 else -1)                              # distance out along the arm plane (negative: leaning back)
+    yaw = wrap(np.arctan2(y, x) - (0.0 if x >= 0 else np.pi))    # the waist points at the target (or away from it when leaning back)
     sols = [_solve(r, yaw, z, np.radians(phi_deg), roll, grip, side) for side in (-1, 1)]
     return [] if sols[0] is None else sols
 
 
 def violations(s):
     """joints (names) that s puts outside their limits."""
-    names = ['waist', 'shoulder', 'elbow', 'wrist', 'roll', 'grip']
+    names = ['waist', 'shoulder', 'elbow', 'roll', 'wrist', 'grip']
     return [(names[i], s[i], LO[i], HI[i]) for i in range(6) if s[i] < LO[i] - 1e-9 or s[i] > HI[i] + 1e-9]
 
 
-def ik(x, y, z, phi_deg, roll=90.0, grip=90.0, check_limits=True):
+def ik(x, y, z, phi_deg, roll=ROLL_ZERO, grip=90.0, check_limits=True):
     """tip position (mm) + tool pitch (deg, absolute) -> servo angles [s0..s5], or None.
     Tries the forward-bent elbow first, then the backward-bent one, and returns the first within the limits."""
     for s in ik_branches(x, y, z, phi_deg, roll, grip):
@@ -131,7 +142,7 @@ if __name__ == '__main__':
     rng = np.random.default_rng(0); n = bad = 0; worst = 0
     for _ in range(20000):
         s = LO + rng.random(6) * (HI - LO)
-        t = fk(s); q = ik(*t['tip'], t['phi_deg'], s[4], s[5])
+        t = fk(s); q = ik(*t['tip'], t['phi_deg'], s[CH_ROLL], s[5])
         n += 1
         if q is None: bad += 1; continue
         e = np.linalg.norm(fk(q)['tip'] - t['tip']); worst = max(worst, e)

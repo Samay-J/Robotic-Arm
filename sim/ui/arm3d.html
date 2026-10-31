@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robotics Arm 3D</title>
+<script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js" } }</script>
+<style>
+  :root { --bg:#0a0a0a; --panel:#101010; --ink:#f1efea; --muted:#8d8b86; --line:#262626; --soft:#171717; --hi:#f1efea; }
+  * { box-sizing:border-box; }
+  html,body { height:100%; margin:0; }
+  body { background:var(--bg); color:var(--ink); font:14px/1.5 "Segoe UI", system-ui, sans-serif; overflow:hidden; }
+  #app { display:grid; grid-template-columns:360px 1fr; height:100%; }
+  @media (max-width:900px) { #app { grid-template-columns:1fr; grid-template-rows:auto 1fr; } }
+  #panel { background:var(--panel); border-right:1px solid var(--line); overflow:auto; padding:22px 22px 26px; }
+  .top { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:22px; }
+  .brand { font:600 13px/1 "Segoe UI", system-ui, sans-serif; letter-spacing:.28em; text-transform:uppercase; }
+  a.back { color:var(--muted); text-decoration:none; font-size:13px; letter-spacing:.04em; } a.back:hover { color:var(--ink); }
+  button { font:inherit; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:transparent; border:1px solid #3a3a3a; border-radius:2px; padding:8px 14px; cursor:pointer; }
+  button:hover { border-color:var(--ink); } button.primary { background:var(--ink); border-color:var(--ink); color:#0a0a0a; font-weight:600; }
+  .joint { padding:12px 0 14px; border-top:1px solid var(--line); transition:background .2s; }
+  .joint:first-child { border-top:none; padding-top:0; }
+  .joint .row { display:flex; align-items:baseline; gap:10px; }
+  .joint .name { font-weight:600; letter-spacing:.02em; flex:1; }
+  .pill { font-size:11px; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; }
+  .joint .val { font-variant-numeric:tabular-nums; min-width:96px; text-align:right; color:var(--muted); font-size:12.5px; }
+  .joint.sel { background:linear-gradient(90deg, rgba(241,239,234,.07), transparent); margin:0 -22px; padding-left:22px; padding-right:22px; }
+  .joint.sel .name { color:#fff; }
+  input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:2px; margin:12px 0 6px; background:linear-gradient(to right, var(--ink) var(--p,50%), #333 var(--p,50%)); outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--ink); border:3px solid var(--panel); box-shadow:0 0 0 1px var(--ink); cursor:grab; }
+  .help { color:var(--muted); font-size:12.5px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .help button { padding:3px 10px; font-size:11px; }
+  .actions { display:flex; gap:10px; margin-top:20px; }
+  #view { position:relative; min-width:0; min-height:0; background:radial-gradient(ellipse at 50% 38%, #1d1d1d 0%, #0a0a0a 70%); }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; outline:none; }
+  #caption { position:absolute; left:22px; bottom:20px; max-width:560px; color:var(--muted); font-size:13px; letter-spacing:.02em; }
+  #caption b { color:var(--ink); letter-spacing:.2em; text-transform:uppercase; font-size:11.5px; margin-right:8px; }
+  #hud { position:absolute; right:22px; top:20px; text-align:right; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
+  #hud .tip { margin-top:6px; font-size:15px; letter-spacing:.04em; text-transform:none; color:var(--ink); font-variant-numeric:tabular-nums; }
+  #loading { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; font-size:12px; background:var(--bg); z-index:3; }
+</style>
+</head>
+<body>
+<div id="app">
+<aside id="panel">
+  <div class="top"><div class="brand">Arm 3D</div><a class="back" href="/">&larr; Lab</a></div>
+  <div id="joints"></div>
+  <div class="actions"><button id="bHome" class="primary">Home pose</button><button id="bCam">Reset view</button></div>
+</aside>
+
+<div id="view">
+  <div id="loading">Loading</div>
+  <canvas id="gl"></canvas>
+  <div id="hud">Tool tip<div class="tip" id="tipBox">-</div></div>
+  <div id="caption"></div>
+</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { STLLoader } from '/vendor/three/STLLoader.js';
+import { OrbitControls } from '/vendor/three/OrbitControls.js';
+import { toCreasedNormals } from '/vendor/three/BufferGeometryUtils.js';
+
+const $ = id => document.getElementById(id);
+const D = Math.PI / 180, f1 = v => (Math.round(v * 10) / 10).toFixed(1);
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+/* ---------- model from the server (same constants as kinematics.py) and the CAD assembly ---------- */
+const S0 = await (await fetch('/api/state')).json();
+const CAD = await (await fetch('/cad_model.json')).json();
+const M = S0.model, LO = S0.lo, HI = S0.hi, HOME = S0.home.slice();
+const NAMES = ['Waist', 'Shoulder', 'Elbow', 'Wrist roll', 'Wrist pitch', 'Gripper'];
+const NOTE = ['turns the whole arm about the vertical axis', 'swings the upper arm', 'bends the forearm', 'rolls the gripper about the forearm axis', 'tilts the gripper (hinge carried by the roll)', 'opens and closes the jaws'];
+
+function linkAngles(s) {
+  return { yaw: M.sign[0] * M.gain[0] * (s[0] - M.zero[0]), a1: 90 + M.sign[1] * M.gain[1] * (s[1] - M.zero[1]),
+           b2: M.sign[2] * M.gain[2] * (s[2] - M.zero[2]), b3: M.sign[3] * M.gain[3] * (s[4] - M.zero[3]),
+           roll: M.sign[3] * M.gain[3] * (s[3] - M.roll_zero) };
+}
+
+/* ---------- scene ---------- */
+const view = $('view'), canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 5, 4000); camera.up.set(0, 0, 1);
+const controls = new OrbitControls(camera, canvas); controls.enableDamping = true;
+function resetCam() { camera.position.set(560, -690, 400); controls.target.set(40, 0, 225); controls.update(); }
+resetCam();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x555555, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 2.6); key.position.set(300, -400, 700); scene.add(key);
+const rim = new THREE.DirectionalLight(0xffffff, 1.1); rim.position.set(-400, 300, 200); scene.add(rim);
+const grid = new THREE.GridHelper(900, 18, 0x4a4a4a, 0x252525); grid.rotation.x = Math.PI / 2; scene.add(grid);
+
+// ivory for the moving links, graphite for the base and the servos
+const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: .42, metalness: .12 });
+const IVORY = 0xe9e6de, GRAPHITE = 0x2b2b2d, BLACK = 0x0f0f10;
+const BODY_COLOR = { fixed: GRAPHITE, waist: IVORY, upper: IVORY, fore: IVORY, roll: IVORY, pitch: IVORY, jawA: IVORY, jawB: IVORY };
+const jointMeshes = {};
+function addMesh(geo, material, parent, joint) { const m = new THREE.Mesh(geo, material); parent.add(m); (jointMeshes[joint] ||= []).push(m); return m; }
+
+/* The assembly frame (SolidWorks, y up) goes into the arm frame (x forward, y left, z up) through one matrix. Every joint
+   group sits at its own pivot; the parts inside are in assembly coordinates shifted by -pivot, so at rest the arm is the CAD pose. */
+const armRoot = new THREE.Group(); armRoot.matrixAutoUpdate = false; scene.add(armRoot);
+{ const r = CAD.root; armRoot.matrix.set(r[0], r[1], r[2], r[9], r[3], r[4], r[5], r[10], r[6], r[7], r[8], r[11], 0, 0, 0, 1); }
+const AX = Object.fromEntries(Object.keys(CAD.axes).map(k => [k, { p: V(...CAD.axes[k].p), d: V(...CAD.axes[k].d).normalize() }]));
+const grp = {};                                                  // body -> { g: Group, pivot: Vector3, axis: Vector3 }
+function makeGroup(body, parent, axisKey) {
+  const a = AX[axisKey], g = new THREE.Group(), pp = parent === armRoot ? V(0, 0, 0) : grp[parent].pivot;
+  g.position.copy(a.p).sub(pp); (parent === armRoot ? armRoot : grp[parent].g).add(g);
+  grp[body] = { g, pivot: a.p.clone(), axis: a.d.clone() }; return grp[body];
+}
+makeGroup('waist', armRoot, 'waist'); makeGroup('upper', 'waist', 'shoulder'); makeGroup('fore', 'upper', 'elbow');
+makeGroup('roll', 'fore', 'roll'); makeGroup('pitch', 'roll', 'pitch'); makeGroup('jawA', 'pitch', 'jawA'); makeGroup('jawB', 'pitch', 'jawB');
+const JOINT_OF = { fixed: -1, waist: 0, upper: 1, fore: 2, roll: 3, pitch: 4, jawA: 5, jawB: 5 };
+
+const loader = new STLLoader(), G = {};
+await Promise.all([...new Set(CAD.parts.map(p => p.stl))].map(async n => { G[n] = toCreasedNormals(await loader.loadAsync(`/stl/${n}.STL`), 0.7); }));
+const holder = body => body === 'fixed' ? armRoot : grp[body].g;
+const offset = body => body === 'fixed' ? V(0, 0, 0) : grp[body].pivot.clone().negate();
+const partM = {};
+CAD.parts.forEach(p => {
+  const m = new THREE.Matrix4().set(...p.M); partM[p.name] = m;
+  const geo = G[p.stl].clone(); geo.applyMatrix4(m); geo.translate(...offset(p.body).toArray());
+  addMesh(geo, mat(BODY_COLOR[p.body]), holder(p.body), JOINT_OF[p.body]);
+});
+// servo bodies are not in the CAD files (suppressed there); boxes with MG996R size, placed from the mates
+function servoBox(partName, dx, dy, dz, cx, cy, cz, body) {                     // box given in the host part's STL coordinates
+  const geo = new THREE.BoxGeometry(dx, dy, dz); geo.translate(cx, cy, cz); geo.applyMatrix4(partM[partName]); geo.translate(...offset(body).toArray());
+  addMesh(geo, mat(BLACK), holder(body), JOINT_OF[body]);
+}
+servoBox('Rotating_Waste-2', 36.5, 40.7, 19.7, 25.05, 33.25, 50, 'waist');     // shoulder servo, in the waist turntable
+servoBox('Arm_2-2', 40.7, 36.5, 19.7, 92.75, 22.45, 27, 'fore');               // elbow servo, in the forearm
+{                                                                                // waist servo, inside the ring (centre from the MG996R mate, long side along the screw line)
+  const geo = new THREE.BoxGeometry(40.7, 36.5, 19.7); geo.rotateY(-Math.atan2(-10, 48)); geo.translate(413.3, 807.4, 1393.9);
+  addMesh(geo, mat(BLACK), armRoot, -1);
+}
+// tip locator: the middle of the jaw tips, carried by the pitch body
+const tipLoc = new THREE.Object3D(); tipLoc.position.set(...CAD.tip_rest).sub(grp.pitch.pivot); grp.pitch.g.add(tipLoc);
+
+/* joint axis marker (shown for the selected joint): a line along the axis and a ring around it, parented to the joint's group */
+const markMat = () => new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: .9 });
+const marker = new THREE.Group(); marker.visible = false;
+const mLine = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 150, 12), markMat());
+const mRing = new THREE.Mesh(new THREE.TorusGeometry(34, 1.2, 10, 64), markMat());
+mLine.renderOrder = mRing.renderOrder = 20; mLine.rotation.x = Math.PI / 2; marker.add(mLine, mRing);   // line and ring axes along local z
+
+/* ---------- state + animation ---------- */
+let cur = HOME.slice(), tgt = HOME.slice(), sel = -1, spin = null;
+const grip0 = HOME[5], C = CAD.cad, Z = V(0, 0, 1);
+
+function applyPose(s) {
+  const L = linkAngles(s);
+  const rot = (b, axis, deg) => grp[b].g.quaternion.setFromAxisAngle(axis, deg * D);
+  rot('waist', AX.waist.d, L.yaw);
+  rot('upper', AX.shoulder.d, L.a1 - C.a1);
+  rot('fore', AX.elbow.d, L.b2 - C.bend2);
+  rot('roll', AX.roll.d, L.roll - C.roll);
+  rot('pitch', AX.pitch.d, -(L.b3 - C.bend3));
+  const open = CAD.jaw_sign * 0.45 * (s[5] - grip0);
+  rot('jawA', AX.jawA.d, open); rot('jawB', AX.jawB.d, -open);
+  armRoot.updateMatrixWorld(true);
+}
+const JOINT_BODY = ['waist', 'upper', 'fore', 'roll', 'pitch', 'jawA'];
+function updateMarker() {
+  marker.parent?.remove(marker);
+  if (sel < 0) { marker.visible = false; return; }
+  const b = grp[JOINT_BODY[sel]];
+  b.g.add(marker); marker.visible = true; marker.position.set(0, 0, 0); marker.quaternion.setFromUnitVectors(Z, b.axis);
+}
+const tipWorld = () => tipLoc.getWorldPosition(new THREE.Vector3());
+function highlight() {
+  Object.entries(jointMeshes).forEach(([j, ms]) => ms.forEach(m => { m.material.emissive = new THREE.Color((+j === sel || (sel === 4 && +j === 5)) ? 0x4a4a4a : 0x000000); }));
+}
+
+/* ---------- panel ---------- */
+const jRows = [];
+NAMES.forEach((n, i) => {
+  const d = document.createElement('div'); d.className = 'joint';
+  d.innerHTML = `<div class="row"><span class="name">${n}</span><span class="pill">ch ${i}</span><span class="val" id="v${i}"></span></div>
+    <input type="range" id="s${i}" min="${LO[i]}" max="${HI[i]}" step="0.5">
+    <div class="help"><span>${NOTE[i]}</span><button data-j="${i}">Spin</button></div>`;
+  $('joints').appendChild(d); jRows.push(d);
+  const r = d.querySelector('input');
+  r.addEventListener('input', () => { tgt[i] = +r.value; spin = null; select(i); });
+  r.addEventListener('pointerdown', () => select(i));
+  d.querySelector('button').onclick = () => { select(i); spin = { j: i, t0: performance.now(), base: tgt[i] }; };
+  d.addEventListener('mouseenter', () => { if (!spin) select(i); });
+});
+function select(i) {
+  sel = i; jRows.forEach((r, k) => r.classList.toggle('sel', k === i)); highlight(); updateMarker();
+  $('caption').innerHTML = i < 0 ? '<b>Select</b>Drag a slider and only that joint moves.' : `<b>${NAMES[i]}</b>${NOTE[i]}. The white ring is the axis it turns about.`;
+}
+function showVals() {
+  const L = linkAngles(cur);
+  [`yaw ${f1(L.yaw)}°`, `a1 ${f1(L.a1)}°`, `bend ${f1(L.b2)}°`, `roll ${f1(L.roll)}°`, `bend ${f1(L.b3)}°`, `jaw ${f1(cur[5])}`].forEach((t, i) => { $('v' + i).textContent = `${f1(cur[i])}  →  ${t}`; });
+  for (let i = 0; i < 6; i++) { const r = $('s' + i); r.value = tgt[i]; r.style.setProperty('--p', ((tgt[i] - LO[i]) / (HI[i] - LO[i]) * 100) + '%'); }
+  const tw = tipWorld(); $('tipBox').textContent = `${f1(tw.x)}, ${f1(tw.y)}, ${f1(tw.z)} mm`;
+}
+$('bHome').onclick = () => { tgt = HOME.slice(); spin = null; };
+$('bCam').onclick = resetCam;
+
+/* ---------- loop ---------- */
+function size() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', size); size();
+function frame(now) {
+  if (spin) {
+    const t = (now - spin.t0) / 1000, k = Math.sin(t / 3 * 2 * Math.PI), j = spin.j, amp = j === 3 || j === 5 ? 25 : 22;
+    tgt[j] = Math.max(LO[j], Math.min(HI[j], spin.base + amp * k)); if (t > 3) { tgt[j] = spin.base; spin = null; }
+  }
+  for (let i = 0; i < 6; i++) cur[i] += (tgt[i] - cur[i]) * 0.22;
+  applyPose(cur); showVals();
+  controls.update(); renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+$('loading').remove(); select(-1); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
